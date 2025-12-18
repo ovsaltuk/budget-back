@@ -1,17 +1,18 @@
 const pool = require("../config/database");
+const bcrypt = require("bcrypt");
+const SALT_ROUNDS = 10;
 
 const userController = {
   createUser: async (req, res) => {
-    const { name, username } = req.body;
-
-    
+    const { name, username, password } = req.body;
 
     try {
+      const hashed_password = await bcrypt.hash(password, SALT_ROUNDS)
       const insertResult = await pool.query(
-        `INSERT INTO users (name, username)
-         VALUES($1, $2)
+        `INSERT INTO users (name, username, hashed_password)
+         VALUES($1, $2, $3)
          RETURNING *`,
-        [ name, username]
+        [ name, username, hashed_password]
       );
 
       res.status(201).json({ user: insertResult.rows[0] });
