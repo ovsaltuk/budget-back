@@ -7,12 +7,12 @@ const userController = {
     const { name, username, password } = req.body;
 
     try {
-      const hashed_password = await bcrypt.hash(password, SALT_ROUNDS)
+      const hashed_password = await bcrypt.hash(password, SALT_ROUNDS);
       const insertResult = await pool.query(
         `INSERT INTO users (name, username, hashed_password)
          VALUES($1, $2, $3)
          RETURNING *`,
-        [ name, username, hashed_password]
+        [name, username, hashed_password]
       );
 
       res.status(201).json({ user: insertResult.rows[0] });
