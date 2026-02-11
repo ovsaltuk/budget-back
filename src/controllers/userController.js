@@ -1,6 +1,9 @@
+const jwt = require('jsonwebtoken');
+
 const pool = require("../config/database");
 const bcrypt = require("bcrypt");
 const SALT_ROUNDS = 10;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const userController = {
   createUser: async (req, res) => {
@@ -49,7 +52,7 @@ const userController = {
     }
   },
   getAllUsers: (req, res) => {
-    pool.query("SELECT * FROM users", (err, result) => {
+    pool.query("SELECT id, email FROM users", (err, result) => {
       if (err) {
         // Если есть ошибка, отправляем сообщение об ошибке
         console.error("Ошибка при запросе к БД:", err);
@@ -66,6 +69,47 @@ const userController = {
         });
       }
     });
+  },
+  login: async (req, res) => {
+    const { email, password } = req.body;
+
+    try {
+      // 1. Ищем пользователя по email
+      const result = await pool.query(
+        "SELECT id, email, hashed_password FROM users WHERE email = $1",
+        [email]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(401).json({ error: "Неверный email или пароль" });
+      }
+
+      const user = result.rows[0];
+
+      // 2. Проверяем пароль
+      const isValidPassword = await bcrypt.compare(password, user.hashed_password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Неверный email или пароль" });
+      }
+
+      // 3. Генерируем JWT-токен
+      const token = jwt.sign(
+        { userId: user.id, email: user.email },
+        JWT_SECRET,
+        { expiresIn: "24h" }
+      );
+
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+        },
+      });
+    } catch (err) {
+      console.error("Ошибка логина:", err);
+      res.status(500).json({ error: "Ошибка сервера" });
+    }
   },
 };
 
