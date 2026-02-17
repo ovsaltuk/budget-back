@@ -4,6 +4,7 @@ const cors = require("cors");
 const app = express();
 
 const userRoutes = require("./routes/userRoutes");
+const transactionsRoutes = require("./routes/transactionsRoutes");
 
 //middlewear
 app.use(express.json());
@@ -15,6 +16,7 @@ app.use(cors({
 
 // Подключаем маршруты
 app.use("/api/users", userRoutes);
+app.use("/api/transactions", transactionsRoutes)
 
 // Корневой маршрут
 app.get("/", (req, res) => {
