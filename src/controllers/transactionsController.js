@@ -1,6 +1,23 @@
 const pool = require("../config/database");
 
 const transactionsController = {
+  getAllTransactions: async (req, res) => {
+    const { userId } = req.user;
+
+    try {
+      const insertResult = await pool.query(
+        `SELECT * FROM transactions
+            WHERE user_id = $1
+            ORDER BY created_at DESC`,
+        [userId],
+      );
+
+      res.json(insertResult.rows);
+    } catch (error) {
+      console.error("Ошибка получения транзакций:", error);
+      res.status(500).json({ error: error.message });
+    }
+  },
   createTransaction: async (req, res) => {
     const { category, subcategory, date, comment, amount } = req.body;
 
