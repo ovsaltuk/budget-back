@@ -1,9 +1,5 @@
-const jwt = require('jsonwebtoken');
-
 const pool = require("../config/database");
-const bcrypt = require("bcrypt");
-const SALT_ROUNDS = 10;
-const JWT_SECRET = process.env.JWT_SECRET;
+const { bcrypt, SALT_ROUNDS, jwt, JWT_SECRET } = require("../config/auth");
 
 const userController = {
   createUser: async (req, res) => {
@@ -52,7 +48,7 @@ const userController = {
     }
   },
   getAllUsers: (req, res) => {
-    pool.query("SELECT id, email FROM users", (err, result) => {
+    pool.query("SELECT id, email, created_at, updated_at FROM users", (err, result) => {
       if (err) {
         // Если есть ошибка, отправляем сообщение об ошибке
         console.error("Ошибка при запросе к БД:", err);
