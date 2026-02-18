@@ -19,7 +19,6 @@ const createTransactionSchema = z.object({
         .refine(val => val > 0, 'Сумма должна быть больше 0')
 });
 
-// ✅ Экспорт middleware-обёртки (как у users)
 const createTransactionValidation = (req, res, next) => {
     try {
         const result = createTransactionSchema.parse(req.body);
@@ -36,7 +35,31 @@ const createTransactionValidation = (req, res, next) => {
     }
 };
 
+const createTransactionsBulkValidation = (req, res, next) => {
+    try {
+        const result = createTransactionsBulkSchema.parse(req.body);
+        req.validatedData = result.transactions; 
+        next();
+    } catch (error) {
+        res.status(400).json({
+            error: 'Неверные данные транзакций',
+            details: error.errors.map(e => ({
+                field: e.path.join('.'), 
+                message: e.message
+            }))
+        });
+    }
+};
+
+const createTransactionsBulkSchema = z.object({
+    transactions: z.array(createTransactionSchema)
+        .min(1, 'Должен быть хотя бы 1 транзакция')
+        .max(50, 'Максимум 50 транзакций за раз')
+});
+
 module.exports = { 
+    createTransactionsBulkValidation,
     createTransactionValidation,
-    createTransactionSchema  // Для TypeScript позже
+    createTransactionSchema,
+    createTransactionsBulkSchema  
 };

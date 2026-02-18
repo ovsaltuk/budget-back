@@ -2,13 +2,19 @@ const express = require("express");
 const router = express.Router();
 const transactionsController = require("../controllers/transactionsController");
 const auth = require("../middlewares/auth");
-const { createTransactionValidation } = require('../validators/transactionsValidation');
+const { createTransactionValidation, createTransactionsBulkValidation } = require('../validators/transactionsValidation');
 
 router.post(
   "/create",
   auth,
   createTransactionValidation,
   transactionsController.createTransaction,
+);
+router.post(
+  "/bulk-create",
+  auth,
+  createTransactionsBulkValidation,
+  transactionsController.createTransactions,
 );
 
 router.get(
