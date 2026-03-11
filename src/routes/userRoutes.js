@@ -7,7 +7,7 @@ const {
 const { handleValidation } = require("../middlewares/handleValidation");
 const auth = require("../middlewares/auth");
 
-router.get("/", userController.getAllUsers);
+router.get("/", auth, userController.getAllUsers);
 router.post(
   "/register",
   createUserRequestValidation,

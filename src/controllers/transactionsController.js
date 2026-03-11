@@ -1,3 +1,4 @@
+const { types } = require("pg");
 const pool = require("../config/database");
 
 const transactionsController = {
@@ -19,54 +20,54 @@ const transactionsController = {
     }
   },
   createTransactions: async (req, res) => {
-  const { transactions } = req.body;
-  
-  if (!Array.isArray(transactions) || transactions.length === 0) {
-    return res.status(400).json({ error: "transactions должен быть непустым массивом" });
-  }
-
-  try {
-    const values = transactions.map(t => [
-      req.user.userId, 
-      t.category, 
-      t.subcategory, 
-      t.date, 
-      t.comment, 
-      t.amount
-    ]);
-
-    const insertResult = await pool.query(
-      `INSERT INTO transactions (user_id, category, subcategory, date, comment, amount)
-       VALUES ${transactions.map((_, i) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`).join(', ')}
-       RETURNING *`,
-      values.flat()
-    );
-
-    res.status(201).json({
-      message: `Создано транзакций: ${insertResult.rowCount}`,
-      transactions: insertResult.rows,
-    });
-  } catch (error) {
-    if (error.code === "23503") {
-      return res.status(400).json({ error: "Пользователь не найден" });
+    const { transactions } = req.body;
+    
+    if (!Array.isArray(transactions) || transactions.length === 0) {
+      return res.status(400).json({ error: "transactions должен быть непустым массивом" });
     }
-    if (error.code === "23505") {
-      return res.status(400).json({ error: "Транзакция уже существует" });
+
+    try {
+      const values = transactions.map(t => [
+        req.user.userId, 
+        t.category, 
+        t.subcategory, 
+        t.date, 
+        t.comment, 
+        t.amount
+      ]);
+
+      const insertResult = await pool.query(
+        `INSERT INTO transactions (user_id, category, subcategory, date, comment, amount)
+           VALUES ${transactions.map((_, i) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`).join(', ')}
+           RETURNING *`,
+        values.flat()
+      );
+
+      res.status(201).json({
+        message: `Создано транзакций: ${insertResult.rowCount}`,
+        transactions: insertResult.rows,
+      });
+    } catch (error) {
+      if (error.code === "23503") {
+        return res.status(400).json({ error: "Пользователь не найден" });
+      }
+      if (error.code === "23505") {
+        return res.status(400).json({ error: "Транзакция уже существует" });
+      }
+      console.log("Ошибка: ", error);
+      res.status(500).json({ error: error.message });
     }
-    console.log("Ошибка: ", error);
-    res.status(500).json({ error: error.message });
-  }
-},
+  },
 
   createTransaction: async (req, res) => {
-    const { category, subcategory, date, comment, amount } = req.body;
+    const { category, subcategory, date, comment, amount, type } = req.body;
 
     try {
       const insertResult = await pool.query(
-        `INSERT INTO transactions (user_id, category, subcategory, date, comment, amount)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                RETURNING *`,
-        [req.user.userId, category, subcategory, date, comment, amount],
+        `INSERT INTO transactions (user_id, category, subcategory, date, amount, type)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    RETURNING *`,
+        [req.user.userId, category, subcategory, date, amount, type],
       );
 
       res.status(201).json({
@@ -84,6 +85,37 @@ const transactionsController = {
       res.status(500).json({ error: error.message });
     }
   },
+
+  deleteTransaction: async (req, res) => {
+    const { id } = req.params; // ID из URL: /transactions/:id
+    const userId = req.user.userId;
+
+    // Валидация ID
+    if (!/^\d+$/.test(id)) {
+      return res.status(400).json({ error: "ID должен быть числом" });
+    }
+
+    try {
+      const deleteResult = await pool.query(
+        `DELETE FROM transactions 
+         WHERE id = $1 AND user_id = $2 
+         RETURNING id, category, amount`,
+        [parseInt(id), userId]
+      );
+
+      if (deleteResult.rowCount === 0) {
+        return res.status(404).json({ error: "Транзакция не найдена или не принадлежит вам" });
+      }
+
+      res.json({
+        message: "Транзакция удалена",
+        deleted: deleteResult.rows[0] // Возвращаем удаленную запись
+      });
+    } catch (error) {
+      console.error("Ошибка удаления транзакции:", error);
+      res.status(500).json({ error: error.message });
+    }
+  }
 };
 
 module.exports = transactionsController;
