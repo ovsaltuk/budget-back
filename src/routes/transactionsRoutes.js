@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const transactionsController = require("../controllers/transactionsController");
+const {transactionsController, upload} = require("../controllers/transactionsController");
 const auth = require("../middlewares/auth");
 const { createTransactionValidation, createTransactionsBulkValidation } = require('../validators/transactionsValidation');
 
@@ -24,6 +24,7 @@ router.get(
 );
 
 router.delete('/:id', auth, transactionsController.deleteTransaction);
+router.post('/upload-excel', auth, upload.single('excel'), transactionsController.uploadExcelTransactions);
 
 
 module.exports = router;
