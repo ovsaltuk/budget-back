@@ -5,7 +5,7 @@ const XLSX = require("xlsx");
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 function excelSerialToDate(serial) {
@@ -135,14 +135,22 @@ const transactionsController = {
     }
   },
   uploadExcelTransactions: async (req, res) => {
-    console.log("📤 Upload Excel:", req.file.originalname);
+    console.log("📤 Upload Excel:", req.file?.originalname);
 
     if (!req.file) {
       return res.status(400).json({ error: "Файл Excel обязателен" });
     }
 
     try {
-      // ✅ Читаем Excel из памяти
+      // ✅ 1. ФУНКЦИЯ конвертации Excel дат (46092 → 2026-03-11)
+      function excelSerialToDate(serial) {
+        const utc_days = Math.floor(serial - 25569);
+        const utc_value = utc_days * 86400;
+        const date = new Date(utc_value * 1000);
+        return date.toISOString().split("T")[0]; // YYYY-MM-DD
+      }
+
+      // ✅ Читаем Excel
       const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
@@ -155,42 +163,87 @@ const transactionsController = {
         return res.status(400).json({ error: "Excel пустой" });
       }
 
-      // ✅ Преобразуем в транзакции (точно как createTransactions)
+      // ✅ 2. Парсим строки → проверяем → создаем массивы [user_id, category, ...]
       const transactions = excelData.map((row, index) => {
         const category = String(row.category || "").trim();
         const subcategory = String(row.subcategory || "").trim();
         let date = String(row.date || "").trim();
         const amount = parseFloat(row.amount);
         const comment = String(row.comment || "").trim();
+        const type = String(row.type || "outcome")
+          .trim()
+          .toLowerCase();
+        if (!["outcome", "income"].includes(type)) {
+          type = "outcome"; // ✅ ФОРСИРУЕМ дефолт
+          console.warn(
+            `⚠️ type исправлен на outcome: "${row.type}" → "${type}"`,
+          );
+        }
 
-        // ✅ Фикс Excel серийной даты (46092 → 2026-03-11)
+        // ✅ 3. Конвертируем Excel дату 46092 → 2026-03-11
         if (!isNaN(parseFloat(date)) && parseFloat(date) > 40000) {
           date = excelSerialToDate(parseFloat(date));
           console.log(`🔄 Excel дата ${row.date} → ${date}`);
         }
 
-        console.log(`📝 Строка ${index + 1}:`, { category, date, amount });
+        console.log(`📝 Строка ${index + 1}:`, {
+          category,
+          date,
+          amount,
+          type,
+        });
 
-        if (!category || isNaN(amount) || amount <= 0 || !date) {
-          console.warn(`⚠️ Пропускаем строку ${index + 1}:`, row);
+        // ✅ 4. Валидация (пропускаем невалидные)
+        if (
+          !category ||
+          isNaN(amount) ||
+          amount <= 0 ||
+          !date ||
+          !["outcome", "income"].includes(type)
+        ) {
+          console.warn(`⚠️ Пропускаем строку ${index + 1}:`, {
+            category,
+            date,
+            amount,
+            type,
+          });
           return null;
         }
 
-        return [req.user.userId, category, subcategory, date, comment, amount];
+        // ✅ 7 значений для БД
+        return [
+          req.user.userId,
+          category,
+          subcategory,
+          date,
+          comment,
+          amount,
+          type,
+        ];
       });
 
-      if (transactions.length === 0) {
+      // ✅ 5. ФИЛЬТР: убираем null (невалидные строки)
+      const validTransactions = transactions.filter(Boolean);
+
+      if (validTransactions.length === 0) {
         return res
           .status(400)
           .json({ error: "Нет валидных транзакций в Excel" });
       }
 
-      // ✅ Bulk INSERT (ваш стиль!)
+      // ✅ 6. Bulk INSERT: генерируем SQL для PostgreSQL
+      const placeholders = validTransactions
+        .map(
+          (_, i) =>
+            `($${i * 7 + 1}, $${i * 7 + 2}, $${i * 7 + 3}, $${i * 7 + 4}, $${i * 7 + 5}, $${i * 7 + 6}, $${i * 7 + 7})`,
+        )
+        .join(", ");
+
       const insertResult = await pool.query(
-        `INSERT INTO transactions (user_id, category, subcategory, date, comment, amount)
-       VALUES ${transactions.map((_, i) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`).join(", ")}
-       RETURNING id, category, amount, date`,
-        transactions.flat(),
+        `INSERT INTO transactions (user_id, category, subcategory, date, comment, amount, type)
+   VALUES ${placeholders}
+   RETURNING id, category, amount, date, type`, // ✅ Возвращаем ТОЛЬКО нужное
+        validTransactions.flat(),
       );
 
       console.log("✅ Импортировано:", insertResult.rowCount);
